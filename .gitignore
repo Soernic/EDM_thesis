@@ -1,0 +1,16 @@
+batch/logs/*
+!batch/logs/.gitkeep
+batch/*.sh
+
+data/*
+!data/.gitkeep
+
+models/*
+!models/.gitkeep
+
+runs/**
+
+*.pyc
+__pycache__/
+.DS_Store
+*.egg-info/
