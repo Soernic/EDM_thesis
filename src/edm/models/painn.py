@@ -192,12 +192,50 @@ class PaiNNConditionalDiffusion(PaiNN):
             state_dim=256,
             cutoff=5,
             edge_dim=64,
-            # TODO: What else do we need for conditional?
+            target_idx=1, # assuming alpha if nothing else is specified
         ):
         super().__init__(num_rounds, state_dim, cutoff, edge_dim)
-        
+        self.target_idx = target_idx
+
         self.time_embedding = ContextEmbedding(state_dim)
         self.context_embedding = ContextEmbedding(state_dim)
+
+        self.inv_out = InvariantReadout(state_dim, 5)
+        self.equi_out = EquivariantReadout(state_dim)
+
+
+    def forward(self, data, t):
+        num_nodes = data.h.size(0)
+        edge = data.edge_index
+        r_ij, norm_r_ij = self.get_edge_vectors(data)
+
+        # Initialise states, time embedding and vector states
+        state = self.node_embedding(data.h)
+        time_embedding = self.time_embedding(t)
+        condition = self.context_embedding(data.c)
+        condition = condition[data.batch]
+
+        # Create context embedding of shape [num_atoms, state_dim]
+        context = time_embedding + condition
+
+        state = state + context
+        state_vec = torch.zeros([num_nodes, self.state_dim, 3], device=data.pos.device, dtype=data.pos.dtype)
+
+        # Message passing loop
+        for message_layer, update_layer in zip(self.message_layers, self.update_layers):
+            state, state_vec = message_layer(state, state_vec, edge, r_ij, norm_r_ij)
+            state, state_vec = update_layer(state, state_vec)
+            state = state + context
+
+        # gated equivariant blocks
+        for gated_block in self.gated_equivariant_blocks: 
+            state, state_vec = gated_block(state, state_vec)
+            state = state + context
+
+        inv_out = self.inv_out(state)
+        equi_out = self.equi_out(state, state_vec, data.pos)
+
+        return equi_out, inv_out                 
 
 
 

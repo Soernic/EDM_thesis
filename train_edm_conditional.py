@@ -1,7 +1,8 @@
 import argparse
 import torch
 
-from edm.trainers import EDMTrainer, ConditionalEDMTrainer
+from edm.trainers import ConditionalEDMTrainer
+from edm.utils.model_utils import args_to_config
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -16,7 +17,11 @@ def parse_args():
     # General settings
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--T', type=int, default=1000, help='Number of diffusion timesteps')
-    parser.add_argument('--p', type=float, default=1.0, help='Fraction of dataset to use (0-1]')
+    parser.add_argument('--p', type=float, default=0.01, help='Fraction of dataset to use (0-1]')
+    parser.add_argument('--target_idx', type=int, default=1, help='Which regression target to use as conditional guidance')
+    parser.add_argument('--resolution', type=int, default=100, 
+                        help='Number of bins in joint distribution over molecules and regression target values')
+    
     parser.add_argument('--device', type=str,
                         default='cuda' if torch.cuda.is_available() else 'cpu',
                         help='Compute device')
@@ -30,7 +35,7 @@ def parse_args():
 
     # Architecture
     parser.add_argument('--num_rounds', type=int, default=9, help='Number of interaction rounds')
-    parser.add_argument('--state_dim', type=int, default=256, help='Dimensionality of node embeddings')
+    parser.add_argument('--state_dim', type=int, default=192, help='Dimensionality of node embeddings')
     parser.add_argument('--cutoff_preprocessing', type=float, default=None, 
                         help='Edge cutoff distance, should be None for diffusion, ~5 for property prediction')
     parser.add_argument('--cutoff_painn', type=float, default=5,
@@ -52,39 +57,16 @@ def parse_args():
     # Run control
     parser.add_argument('--epochs', type=int, default=1000, help='Number of training epochs')
 
-    parser.add_argument('--name', type=str, default="edm", help="The experiment name")
+    parser.add_argument('--name', type=str, default="edm_conditional", help="The experiment name")
     return parser.parse_args()
-
 
 
 def main():
     args = parse_args()
-    # Build config dictionary for EDMTrainer
-    config = {
-        'seed': args.seed,
-        'T': args.T,
-        'device': torch.device(args.device),
-        'p': args.p,
-        'lr': args.lr,
-        'factor': args.factor,
-        'patience': args.patience,
-        'alpha': args.alpha,
-        'sampling_model': args.sampling_model,
-        'num_rounds': args.num_rounds,
-        'state_dim': args.state_dim,
-        'cutoff_preprocessing': args.cutoff_preprocessing,
-        'cutoff_painn': args.cutoff_painn,
-        'edge_dim': args.edge_dim,
-        'batch_size': args.batch_size,
-        'atom_scale': args.atom_scale,
-        'noise_schedule': args.noise_schedule,
-        'benchmark_every': args.benchmark_every,
-        'benchmark_mols': args.benchmark_mols,
-        'use_tensorboard': args.use_tensorboard,
-        'name': args.name,
-    }
+    config = args_to_config(args)
 
-    trainer = EDMTrainer(config)
+    trainer = ConditionalEDMTrainer(config)
+    trainer.sample(2)
     trainer.train(args.epochs)
     atom_stab, mol_stab = trainer.benchmark()
     print(f'Final benchmark — atom stability: {atom_stab:.3f}, molecule stability: {mol_stab:.3f}')

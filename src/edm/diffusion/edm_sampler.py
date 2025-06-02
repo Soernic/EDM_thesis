@@ -1,6 +1,9 @@
 import torch
+import torch.nn.functional as F
 from edm.qm9 import QM9Dataset
 from tqdm import tqdm
+
+from pdb import set_trace
 
 
 class EDMSampler:
@@ -20,6 +23,12 @@ class EDMSampler:
         self.atom_scale = cfg['atom_scale']
         self.data = QM9Dataset(p=cfg['p'], device=cfg['device'], atom_scale=cfg['atom_scale'])
         self.categorical_distribution = cfg['categorical_distribution']
+
+        if 'joint_distribution' in cfg:
+            self.joint_distribution = cfg['joint_distribution']
+            self.type = 'conditional'
+        else:
+            self.type = 'unconditional'
 
         # TODO: Potential overwrite some of the above with arguments from argparse?
         if args is not None:
@@ -44,7 +53,24 @@ class EDMSampler:
         net = self.model
         net.eval()
 
-        M_vec = torch.multinomial(self.categorical_distribution, n_samples, replacement=True, generator=g).to(device)
+
+        if self.type == 'conditional':
+            # Flatten the distribution to a vector of probabilities
+            joint_flat = self.joint_distribution.flatten()
+
+            # Sample using those probabilities
+            joint_idx = torch.multinomial(joint_flat, n_samples, replacement=True, generator=g).to(device)
+            
+            #
+            num_bins, max_Mp1 = self.joint_distribution.shape
+            c_bin_idx = joint_idx // max_Mp1
+            M_vec = joint_idx % max_Mp1
+
+            # Convert bin indices to values in [0, 1] (midpoint of bin)
+            c_vals = ((c_bin_idx + 0.5) / num_bins).to(device)
+        else:
+            M_vec = torch.multinomial(self.categorical_distribution, n_samples, replacement=True, generator=g).to(device)
+            c_vals = None
         total_atoms = int(M_vec.sum())
         batch = torch.repeat_interleave(torch.arange(n_samples, device=device), M_vec).long()
 
@@ -63,7 +89,7 @@ class EDMSampler:
         pos = torch.randn(total_atoms, 3, device=device, generator=g)
         pos = net.subtract_CoG(batch, pos)
         h = torch.randn(total_atoms, len(self.data.atom_types), device=device, generator=g)
-        data = Data(pos=pos, h=h, edge_index=edge_index, batch=batch)
+        data = Data(pos=pos, h=h, edge_index=edge_index, batch=batch, c=c_vals)
 
         # Sampling loop
         print(f'Sampling {n_samples} molecules...')
@@ -134,6 +160,10 @@ class EDMSampler:
         probs = torch.softmax(data.h / self.atom_scale, dim=1)
         type_idx = probs.argmax(dim=1)
         data.z = self.data.atom_types_reverse[type_idx]
+
+        # Reset data.h for PaiNNPropertyPredictor
+        data.h = F.one_hot(type_idx, num_classes=len(self.data.atom_types)).float()
+        set_trace()
 
         # Convert to individual data objects and return list of them
         mols, batch_vec = [], data.batch

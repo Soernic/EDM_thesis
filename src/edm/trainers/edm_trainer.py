@@ -10,7 +10,7 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
-from edm.diffusion import EDM, CosineNoiseSchedule, LinearNoiseSchedule, EDMSampler
+from edm.diffusion import EDM, ConditionalEDM, CosineNoiseSchedule, LinearNoiseSchedule, EDMSampler
 from edm.qm9 import QM9Dataset
 from edm.benchmark import Benchmarks
 from torch.optim import Adam, AdamW
@@ -259,3 +259,52 @@ class EDMTrainer:
 
         return atom_stable, molecule_stable # stability is used for deciding on best model
         
+
+
+class ConditionalEDMTrainer(EDMTrainer):
+    def __init__(self, config):
+        super().__init__(config)
+        self.target_idx = config['target_idx']
+        self.resolution = config['resolution']
+
+        # Register EDM model (includes PaiNN EGNN backbone)
+        self.model = ConditionalEDM(
+            noise_schedule=self.noise,
+            num_rounds=config.get('num_rounds'),
+            state_dim=config.get('state_dim'),
+            cutoff_painn=config.get('cutoff_painn'), # this cutoff is different from data preprocessing cutoff
+            edge_dim=config.get('edge_dim'),
+            target_idx=config.get('target_idx')
+        ).to(self.device)
+
+        # EMA model for nice sampling
+        self.ema_model = copy.deepcopy(self.model)
+        for p in self.ema_model.parameters():
+            p.requires_grad_(False)
+
+        # Initialise QM9Dataset instance and and download data
+        self.data = QM9Dataset(
+            p=self.p,
+            generator=self.generator,
+            device=self.device,
+            batch_size=self.batch_size,
+            atom_scale=self.atom_scale,
+            target_idx=config.get('target_idx'),
+            resolution=config.get('resolution')
+        )
+
+        # Ready train, val, test split, create loaders, and push everything to GPU all at once. 
+        self.data.get_data() # split into train, val, test
+        self.categorical_distribution = self.data.compute_categorical_distribution() # compute on train
+        self.data.compute_statistics_and_normalise() # normalise based on train, adding data.c to all
+        self.joint_distribution = self.data.compute_joint_distribution() 
+        self.config['categorical_distribution'] = self.categorical_distribution
+        self.config['joint_distribution'] = self.joint_distribution
+        self.train_loader, self.val_loader, self.test_loader = self.data.make_dataloaders() # on GPU. 
+
+        # Initialising after categorical distribution is defined and in config. 
+        # The sampler needs it.
+        self.sampler = EDMSampler(model=self.ema_model, noise_schedule=self.noise, cfg=self.config)
+
+
+

@@ -22,11 +22,13 @@ class QM9Dataset:
             batch_size=100, 
             atom_scale=0.25, # diffusion default
             cutoff_preprocessing=None, # diffusion default, otherwise ~5 Å
-            target_idx=None
+            target_idx=None,
+            resolution=None
             ):
         
         self.p = p # proportion of dataset
         self.target_idx = target_idx
+        self.resolution = resolution
         
         if generator is not None: 
             self.generator = generator
@@ -113,15 +115,17 @@ class QM9Dataset:
             # For train
             for i, data in tqdm(enumerate(self.train_data)):
                 data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
+                data.c = data.y[:, self.target_idx] # just duplicate it
 
             # For val
             for i, data in tqdm(enumerate(self.val_data)):
                 data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
+                data.c = data.y[:, self.target_idx] # just duplicate it
 
             # For test
             for i, data in tqdm(enumerate(self.test_data)):
                 data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
-
+                data.c = data.y[:, self.target_idx] # just duplicate it
             
     def denormalise(self, y):
         y = y * (self.maxs - self.mins) + self.mins
@@ -165,6 +169,42 @@ class QM9Dataset:
 
         probs = hist/hist.sum()
         return probs    
+    
+    def compute_joint_distribution(self):
+        """
+        Compute 2D categorical distribution p(c, M) over:
+        - c: normalised property value (discretised into bins)
+        - M: number of atoms in molecule
+        """
+        assert hasattr(self, 'train_data'), 'Call get_data() before computing target distribution'
+        assert hasattr(self.train_data[0], 'c'), 'Call compute_statistics_and_normalise() before target distribution'
+
+        num_bins = self.resolution
+
+        c_values = []
+        M_values = []
+
+        for data in self.train_data:
+            c_values.append(data.c.item()) # scalar c in [0, 1] (it has been normalised)
+            M_values.append(data.z.size(0)) # number of atoms
+
+        c_values = torch.tensor(c_values, device=self.device)
+        M_values = torch.tensor(M_values, device=self.device)
+
+        # Bin c into `num_bins`` intervals
+        c_bins = torch.clamp((c_values * num_bins).long(), max=num_bins - 1)
+        max_M = M_values.max().item()
+
+        joint_hist = torch.zeros((num_bins, max_M + 1), device=self.device)
+
+        for cb, m in zip(c_bins, M_values):
+            joint_hist[cb, m] += 1
+
+        joint_probs = joint_hist / joint_hist.sum()
+
+        return joint_probs
+
+
 
     def one_hot_converter_setup(self):
         self.mapping_tensor = torch.full((10,), -1, dtype=torch.long, device=self.device)

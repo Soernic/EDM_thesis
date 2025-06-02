@@ -1,2 +1,2 @@
-from .edm_trainer import EDMTrainer
+from .edm_trainer import EDMTrainer, ConditionalEDMTrainer
 from .prop_pred_trainer import PropertyPredictionTrainer
