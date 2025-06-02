@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 
 from edm.models import ContextEmbedding, PaiNNMessage, PaiNNUpdate, GatedEquivariantBlock, \
-                        InvariantReadout, EquivariantReadout
+                        InvariantReadout, EquivariantReadout, AlphaEquivariantReadout
 
+
+from pdb import set_trace
 
 class PaiNN(nn.Module):
     """
@@ -70,7 +72,7 @@ class PaiNNPropertyPredictor(PaiNN):
             state_dim=128,
             cutoff=5,
             edge_dim=20,
-            property='invariant' # ['invariant' | 'equivariant']
+            property='invariant' # ['invariant' | 'equivariant' | 'alpha_equivariant']
         ):
         super().__init__(num_rounds, state_dim, cutoff, edge_dim, geb_layers=3)
 
@@ -79,6 +81,8 @@ class PaiNNPropertyPredictor(PaiNN):
             self.readout = InvariantReadout(state_dim, 1) # e.g., energy predictions
         elif property == 'equivariant': 
             self.readout = EquivariantReadout(state_dim) # e.g., dipole moment
+        elif property == 'alpha_equivariant':
+            self.readout = AlphaEquivariantReadout(state_dim)
         else: 
             raise ValueError('property value should be in [invariant | equivariant]')
         
@@ -111,6 +115,8 @@ class PaiNNPropertyPredictor(PaiNN):
             molwise = torch.index_add(molwise, dim=0, index=data.batch, source=out).squeeze(-1)
 
         elif self.property == 'equivariant':
+            # These are special readout layers they define in PaiNN that work on vectors which we then take the norm of
+
             # Collection variable molwise
             molwise = torch.zeros((torch.max(data.batch)+1, 3)).to(data.pos)
 
@@ -120,6 +126,13 @@ class PaiNNPropertyPredictor(PaiNN):
             # Adding to molwise and taking the norm for QM9 predictions
             molwise = torch.index_add(molwise, dim=0, index=data.batch, source=out)
             molwise = torch.norm(molwise, dim=1, keepdim=False) # [B, ]
+
+        elif self.property == 'alpha_equivariant':
+            molwise = torch.zeros((torch.max(data.batch)+1, 3, 3)).to(data.pos)
+            atomwise_alpha = self.readout(state, state_vec, data.pos) # [B, 3, 3]
+
+            molwise = torch.index_add(molwise, dim=0, index=data.batch, source=atomwise_alpha)
+            molwise = molwise.diagonal(dim1=1, dim2=2).sum(-1) / 3 # [mols]
 
         else:
             raise ValueError('What happened to self.property?')

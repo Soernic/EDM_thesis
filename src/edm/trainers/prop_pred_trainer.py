@@ -288,7 +288,7 @@ class PropertyPredictionTrainer:
                         'mae_normalised': test_metrics['mae_normalised']                    
                     }
 
-                    plot_path = f"{self.run_dir}/predictions_epoch_{epoch}.png"
+                    plot_path = f"{self.run_dir}/{epoch:04}_preds.png"
                     self._plot_predictions(test_metrics, plot_path)
 
                     if self.writer:
@@ -324,11 +324,15 @@ class PropertyPredictionTrainer:
         polarizability tensors are vector properties. Take a closer look
         if you need to use others. 
         """
-        if self.target_idx in [0, 1]: # [0: mu | 1: alpha]
+        if self.target_idx == 0: # [0: mu | 1: alpha]
             return 'equivariant'
+        
+        elif self.target_idx == 1:
+            return 'alpha_equivariant'
         
         else: # rest is assumed invariant
             return 'invariant'
+            
         
     def _plot_predictions(self, test_metrics, plot_path):
         plot_predictions(self.target_idx, test_metrics, plot_path)

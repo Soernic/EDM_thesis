@@ -22,8 +22,9 @@ class EDMSampler:
         self.categorical_distribution = cfg['categorical_distribution']
 
         # TODO: Potential overwrite some of the above with arguments from argparse?
-        if args.seed:
-            self.seed = args.seed
+        if args is not None:
+            if args.seed is not None:
+                self.seed = args.seed
 
 
     @torch.no_grad()
