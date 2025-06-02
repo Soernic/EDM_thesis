@@ -8,7 +8,8 @@ data/*
 models/*
 !models/.gitkeep
 
-runs/**
+runs/*
+!runs/.gitkeep
 
 *.pyc
 __pycache__/

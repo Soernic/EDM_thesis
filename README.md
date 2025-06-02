@@ -2,5 +2,5 @@
 
 Add `src` to path:
 ```
-pip install -e .
+pip3 install -e .
 ```

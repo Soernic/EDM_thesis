@@ -17,8 +17,8 @@ def parse_args():
     )
 
     # Data
-    parser.add_argument('--target_idx', type=int, default=7, help='QM9 target to train on?')
-    parser.add_argument('--p', type=float, default=0.01, help='Fraction of dataset to train on')
+    parser.add_argument('--target_idx', type=int, default=0, help='QM9 target to train on?')
+    parser.add_argument('--p', type=float, default=1, help='Fraction of dataset to train on')
     parser.add_argument('--cutoff_data', type=float, default=5.0, help='Cutoff threshold for graph edges in molecule')
     
     # LR and optimiser
@@ -37,9 +37,9 @@ def parse_args():
     parser.add_argument('--ema_alpha', type=float, default=0.9, help='ema for validation loss, used for reducing learning rate')
     
     # Training
-    parser.add_argument('--epochs', type=int, default=2000, help='Epochs to train for')
+    parser.add_argument('--epochs', type=int, default=1500, help='Epochs to train for')
     parser.add_argument('--batch_size', type=int, default=100)
-    parser.add_argument('--benchmark_every', type=int, default=10, help='How often to run a benchmark during trianing')
+    parser.add_argument('--benchmark_every', type=int, default=50, help='How often to run a benchmark during trianing')
     parser.add_argument('--model_save_path', type=str, default='best_model', help='What to call the model in the run directory')
     parser.add_argument('--use_tensorboard', type=bool, default=True)
 
