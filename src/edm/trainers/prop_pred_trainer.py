@@ -7,7 +7,7 @@ from datetime import datetime
 
 import torch
 import torch.nn.functional as F
-from torch.optim import AdamW
+from torch.optim import AdamW, Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import trange
 
@@ -103,7 +103,8 @@ class PropertyPredictionTrainer:
 
 
     def setup_learning(self):
-        self.optimiser = AdamW(self.model.parameters(), lr=self.lr, weight_decay=1e-6, amsgrad=True)
+        #self.optimiser = AdamW(self.model.parameters(), lr=self.lr, weight_decay=0, amsgrad=True)
+        self.optimiser = Adam(self.model.parameters(), lr=self.lr)
         self.scheduler = ReduceLROnPlateau(self.optimiser, mode='min', factor=self.factor, patience=self.patience)
 
 
