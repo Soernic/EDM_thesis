@@ -14,6 +14,17 @@ class EDMSampler:
             cfg, 
             args=None
             ):
+        
+        # TODO: Potential overwrite some of the above with arguments from argparse?
+        if args is not None:
+            if hasattr(args, 'seed'):
+                self.seed = args.seed
+                cfg['seed'] = args.seed
+
+            if hasattr(args, 'device'):
+                self.device = args.device
+                cfg['device'] = args.device
+
         self.model = model
         self.noise = noise_schedule
         self.cfg = cfg
@@ -30,10 +41,6 @@ class EDMSampler:
         else:
             self.type = 'unconditional'
 
-        # TODO: Potential overwrite some of the above with arguments from argparse?
-        if args is not None:
-            if args.seed is not None:
-                self.seed = args.seed
 
 
     @torch.no_grad()
@@ -163,7 +170,7 @@ class EDMSampler:
 
         # Reset data.h for PaiNNPropertyPredictor
         data.h = F.one_hot(type_idx, num_classes=len(self.data.atom_types)).float()
-        set_trace()
+        # set_trace()
 
         # Convert to individual data objects and return list of them
         mols, batch_vec = [], data.batch
@@ -173,7 +180,8 @@ class EDMSampler:
                 Data(
                     pos=data.pos[mask].detach().cpu(),
                     z=data.z[mask].detach().cpu(),
-                    h=data.h[mask].detach().cpu()
+                    h=data.h[mask].detach().cpu(),
+                    batch=torch.zeros(data.z[mask].size(0)).long().detach().cpu()
                 )
             )
 
