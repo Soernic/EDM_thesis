@@ -33,7 +33,8 @@ class PropertyPredictionBenchmarks:
             all_preds.append(out)
             all_targets.append(target)
 
-            mae_total = F.l1_loss(out, target).item() * data.y.size(0)
+            # mae_total += F.l1_loss(out, target).item() * data.y.size(0)
+            mae_total += F.l1_loss(out, target, reduction='sum').item()
             num_samples += target.size(0)
 
         all_preds = torch.cat(all_preds, dim=0)

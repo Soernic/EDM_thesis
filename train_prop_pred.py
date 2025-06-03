@@ -24,7 +24,7 @@ def parse_args():
     # LR and optimiser
     parser.add_argument('--lr', type=float, default=5e-4, help='learning rate for model trianing')
     parser.add_argument('--weight_decay', type=float, default=0)
-    parser.add_argument('--patience', type=int, default=20, help='ReduceLROnPlateau patience')
+    parser.add_argument('--patience', type=int, default=5, help='ReduceLROnPlateau patience')
     parser.add_argument('--factor', type=float, default=0.5, help='ReduceLROnPlateau reduction factor')
     
     # Model configuration
@@ -37,9 +37,9 @@ def parse_args():
     parser.add_argument('--ema_alpha', type=float, default=0.9, help='ema for validation loss, used for reducing learning rate')
     
     # Training
-    parser.add_argument('--epochs', type=int, default=1500, help='Epochs to train for')
+    parser.add_argument('--epochs', type=int, default=2000, help='Epochs to train for')
     parser.add_argument('--batch_size', type=int, default=100)
-    parser.add_argument('--benchmark_every', type=int, default=50, help='How often to run a benchmark during trianing')
+    parser.add_argument('--benchmark_every', type=int, default=10, help='How often to run a benchmark during trianing')
     parser.add_argument('--model_save_path', type=str, default='best_model', help='What to call the model in the run directory')
     parser.add_argument('--use_tensorboard', type=bool, default=True)
 
