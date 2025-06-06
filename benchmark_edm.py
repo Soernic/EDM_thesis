@@ -13,7 +13,7 @@ def parse_args():
 
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Compute device')
-    parser.add_argument('--path', type=str, default='models/edm.pt', help='path to .pt file containing model weights')
+    parser.add_argument('--path', type=str, default='models/edm_cosine.pt', help='path to .pt file containing model weights')
     parser.add_argument('--samples', type=int, default=500, help='how many molecules to sample')
 
     return parser.parse_args()

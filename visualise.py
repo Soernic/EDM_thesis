@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Compute device')
 
-    parser.add_argument('--path', type=str, default='models/edm.pt', help='path to .pt file containing model weights')
+    parser.add_argument('--path', type=str, default='models/edm_cosine.pt', help='path to .pt file containing model weights')
     parser.add_argument('--samples', type=int, default=8, 
                         help='how many molecules to sample? If --task = both, sample --samples of both')
     
@@ -56,7 +56,7 @@ if __name__ == '__main__':
             res = bench.run_all([mol], requested=1, q=True)
             if res['stability'] == (1.0, 1.0) and res['validity'] == 1.0:
                 print(f'[visualisation] Mol {idx} stable, saving..')
-                save_molecule_png(mol, f'plots/3D_mols/{idx}.png')
+                save_molecule_png(mol, f'plots/edm/edm_{idx:02}.png')
             else:
                 print(f'[visualisation] Mol {idx} unstable, skipping..')
 
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         print(f'[visualisation] Rendering {args.samples} dataset samples..\n')
         random_indices = torch.randint(0, len(data.dataset), size=(args.samples,))
         for idx, mol in tqdm(enumerate(data.dataset[random_indices])):
-            save_molecule_png(mol, f'plots/QM9/{idx}.png')
+            save_molecule_png(mol, f'plots/qm9/qm9_{idx:02}.png')
         
 
         

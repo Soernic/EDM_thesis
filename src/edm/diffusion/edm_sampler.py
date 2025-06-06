@@ -188,3 +188,158 @@ class EDMSampler:
         # TODO: Replace .h with clean one-hot encoding so PaiNNPropertyPredictor works cleanly on it
 
         return mols
+    
+
+
+from typing import List, Optional
+import torch
+from torch_geometric.data import Data
+import torch.nn.functional as F
+
+class EDMTrajectorySampler(EDMSampler):
+    """
+    Like EDMSampler, but instead of discarding the intermediate states it
+    returns a full trajectory for every molecule.
+
+    >>> sampler = EDMTrajectorySampler(model, noise, cfg,
+    ...                                checkpoints=[1000, 900, 800, 0])
+    >>> trajs = sampler.sample(n_samples=8)
+    >>> len(trajs)                 # 8 trajectories
+    8
+    >>> len(trajs[0])              # 4 snapshots per trajectory
+    4
+    """
+    def __init__(self,
+                 model,
+                 noise_schedule,
+                 cfg,
+                 checkpoints: Optional[List[int]] = None,
+                 num_checkpoints: Optional[int] = None,
+                 args=None):
+        super().__init__(model, noise_schedule, cfg, args)
+
+        if checkpoints is not None and num_checkpoints is not None:
+            raise ValueError("Specify either 'checkpoints' or 'num_checkpoints', not both.")
+
+        if checkpoints is None:
+            # Evenly spaced, including T and 0
+            k = num_checkpoints or 11
+            self.checkpoints = [int(round(t))
+                                for t in torch.linspace(self.T, 0, k).tolist()]
+            
+        else:
+            # keep the *given* order, just sanity-check the values
+            self.checkpoints = []
+            for t in checkpoints:
+                t_int = int(t)
+                if not 0 <= t_int <= self.T:
+                    raise ValueError(f"Checkpoint {t_int} outside [0, T={self.T}]")
+                if t_int not in self.checkpoints:          # drop duplicates
+                    self.checkpoints.append(t_int)
+
+        # We’ll look-up quickly during the loop
+        self._checkpoint_set = set(self.checkpoints)
+
+    @torch.no_grad()
+    def sample(self, n_samples: int = 16):
+        """
+        Returns
+        -------
+        trajectories : List[List[Data]]
+            trajectories[i][j] contains the j-th saved snapshot of molecule i.
+        """
+        device, T, sched, g = self.device, self.T, self.noise, torch.Generator(device=self.device)
+        g.manual_seed(self.seed)
+        net = self.model
+        net.eval()
+
+        # --- identical pre-sampling section from EDMSampler -----------------
+        if self.type == 'conditional':
+            joint_flat = self.joint_distribution.flatten()
+            joint_idx = torch.multinomial(joint_flat, n_samples, replacement=True, generator=g).to(device)
+            num_bins, max_Mp1 = self.joint_distribution.shape
+            c_bin_idx = joint_idx // max_Mp1
+            M_vec = joint_idx % max_Mp1
+            c_vals = ((c_bin_idx + 0.5) / num_bins).to(device)
+        else:
+            M_vec = torch.multinomial(self.categorical_distribution, n_samples, replacement=True, generator=g).to(device)
+            c_vals = None
+
+        total_atoms = int(M_vec.sum())
+        batch = torch.repeat_interleave(torch.arange(n_samples, device=device), M_vec).long()
+
+        edge_chunks, start = [], 0
+        for Mi in M_vec.tolist():
+            idx = torch.arange(start, start + Mi, device=device)
+            pairs = torch.combinations(idx, r=2, with_replacement=False)
+            edges = torch.cat([pairs, pairs.flip(1)], dim=0).T
+            edge_chunks.append(edges)
+            start += Mi
+        edge_index = torch.cat(edge_chunks, dim=1)
+
+        pos = torch.randn(total_atoms, 3, device=device, generator=g)
+        pos = net.subtract_CoG(batch, pos)
+        h = torch.randn(total_atoms, len(self.data.atom_types), device=device, generator=g)
+        data = Data(pos=pos, h=h, edge_index=edge_index, batch=batch, c=c_vals)
+
+        # ---------- helpers --------------------------------------------------
+        def _split_to_pyg_list(d: Data) -> List[Data]:
+            """Clone tensors *once* to CPU, then slice per-molecule."""
+            probs = torch.softmax(d.h / self.atom_scale, dim=1)
+            type_idx = probs.argmax(dim=1)
+            z = self.data.atom_types_reverse[type_idx]
+
+            h_onehot = F.one_hot(type_idx, num_classes=len(self.data.atom_types)).float()
+
+            mols, bvec = [], d.batch.cpu()
+            for idx in range(bvec.max().item() + 1):
+                mask = bvec == idx
+                mols.append(
+                    Data(
+                        pos=d.pos[mask].detach().cpu(),
+                        z=z[mask].detach().cpu(),
+                        h=h_onehot[mask].detach().cpu(),
+                        batch=torch.zeros(mask.sum()).long()
+                    )
+                )
+            return mols
+
+        # Prepare empty trajectory holders
+        trajectories = [[] for _ in range(n_samples)]
+
+        # ---------- sampling loop with snapshotting --------------------------
+        print(f'Sampling {n_samples} molecules with checkpoints {self.checkpoints}')
+        for t in range(T, 0, -1):
+            t_full = torch.full((total_atoms,), t, device=device)
+            s_full = t_full - 1
+            t_norm = t_full / T
+
+            eps_pred_x, eps_pred_h = net(data, t_norm)
+            alpha_ts = sched.alpha_t_given_s(t_full, s_full)
+            sigma_ts = sched.sigma_t_given_s(t_full, s_full)
+            sigma_t = sched.sigma(t_full)
+
+            c1 = torch.clip(1 / alpha_ts, max=15)[:, None]
+            c2 = torch.clip(-(sigma_ts ** 2) / (alpha_ts * sigma_t), min=-15)[:, None]
+            c3 = sched.sigma_t_to_s(t_full, s_full)[:, None]
+
+            eps_x = torch.randn(data.pos.shape, generator=g, device=device)
+            eps_x = net.subtract_CoG(batch, eps_x)
+            eps_h = torch.randn(data.h.shape, generator=g, device=device)
+
+            data.pos = c1 * data.pos + c2 * eps_pred_x + c3 * eps_x
+            data.h = c1 * data.h + c2 * eps_pred_h + c3 * eps_h
+            data.pos = net.subtract_CoG(batch, data.pos)
+
+            # ---------- save snapshot if this step is requested ---------------
+            if t in self._checkpoint_set:
+                for i, mol in enumerate(_split_to_pyg_list(data)):
+                    trajectories[i].append(mol)
+
+        # ---------------- grab the final state (t = 0) --------------------
+        if 0 in self._checkpoint_set:            # user asked for it
+            for i, mol in enumerate(_split_to_pyg_list(data)):
+                trajectories[i].append(mol)
+
+
+        return trajectories

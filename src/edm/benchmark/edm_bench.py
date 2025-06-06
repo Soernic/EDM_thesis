@@ -20,7 +20,7 @@ class Benchmarks:
         # Count valid ones
         atom_hits, mol_hits = 0, 0
         total_atoms = 0
-        for mol in tqdm(mols):
+        for mol in mols:
             atom_mask, mol_ok = stable_flags(mol)
             atom_hits += atom_mask.sum().item()
             total_atoms += len(atom_mask)

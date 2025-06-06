@@ -18,9 +18,9 @@ def parse_args():
     # If overwriting here, it would contaminate data splits
 
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu', help='Compute device')
-    parser.add_argument('--path', type=str, default='models/prop_pred.pt', help='path to .pt file containing model weights')
+    parser.add_argument('--path', type=str, default='models/mu.pt', help='path to .pt file containing model weights')
     parser.add_argument('--plot_folder', type=str, default='plots/prop_pred', help='where to save performance plot')
-    parser.add_argument('--plot_name', type=str, default='test_mae', help='what to call the performance plot')
+    parser.add_argument('--plot_name', type=str, default='mu_mae', help='what to call the performance plot')
 
     return parser.parse_args()
 

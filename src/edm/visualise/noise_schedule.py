@@ -18,7 +18,7 @@ class NoiseSchedulePlotter:
     def plot_schedule(self, schedule, label: str | None = None):
         t = torch.arange(len(schedule.alphas))
 
-        plt.figure(figsize=(6, 4))
+        plt.figure(figsize=(10, 4))
         plt.plot(t, schedule.alphas.cpu(), label=r"$\alpha_t$" if label is None else f"{label}: α_t")
         plt.plot(t, schedule.sigmas.cpu(), label=r"$\sigma_t$" if label is None else f"{label}: σ_t")
         plt.xlabel("t")
@@ -29,7 +29,7 @@ class NoiseSchedulePlotter:
 
 
     def compare_schedules(self, schedules: list, labels: list[str] | None = None):
-        plt.figure(figsize=(6, 4))
+        plt.figure(figsize=(10, 4))
         for i, sched in enumerate(schedules):
             lab = None if labels is None else labels[i]
             plt.plot(sched.alphas.cpu(), label=f"{lab}: α_t" if lab else r"$\alpha_t$")

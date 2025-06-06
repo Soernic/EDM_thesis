@@ -9,7 +9,8 @@ from tqdm import tqdm
 from pdb import set_trace
 
 from edm.utils.model_utils import load_model, load_prop_pred
-from edm.utils import property_names
+from edm.utils import atomic_number_to_symbol
+from edm.utils import property_names_safe as property_names
 from edm.diffusion import EDMSampler
 from edm.benchmark import Benchmarks
 from edm.qm9 import QM9Dataset
@@ -76,7 +77,7 @@ class HistogramPlotter:
             edgecolor='#487EBF',
             linewidth=1.0,
             label=label_edm,
-            alpha=0.7,
+            alpha=0.5,
         )
 
         ax.set_title(f'{title} Distribution Comparison', fontsize=14)
@@ -87,6 +88,54 @@ class HistogramPlotter:
         plt.tight_layout()
         filename = f'{label_data}_vs_{label_edm}_{title.replace(" ", "_")}.png'
         save_path = os.path.join(self.save_folder_path, filename)
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+
+
+    def plot_atom_categorical(self, qm9_mols, edm_mols, atom_types=None):
+        """
+        Plots overlaid categorical distributions of atom types for QM9 and EDM molecules.
+        `atom_types` should be a list of atomic numbers to include in the plot (optional).
+        """
+
+        # Flatten all atomic numbers
+        qm9_atoms = torch.cat([mol.z for mol in qm9_mols], dim=0).cpu().numpy()
+        edm_atoms = torch.cat([mol.z for mol in edm_mols], dim=0).cpu().numpy()
+
+        # Determine all atom types to consider
+        if atom_types is None:
+            all_types = sorted(set(qm9_atoms.tolist()) | set(edm_atoms.tolist()))
+        else:
+            all_types = sorted(atom_types)
+
+        # Count and normalize
+        def count_dist(atom_array):
+            return np.array([np.sum(atom_array == t) for t in all_types])
+
+        qm9_counts = count_dist(qm9_atoms)
+        edm_counts = count_dist(edm_atoms)
+
+        qm9_probs = qm9_counts / qm9_counts.sum()
+        edm_probs = edm_counts / edm_counts.sum()
+
+        labels = [atomic_number_to_symbol.get(t, str(t)) for t in all_types]
+
+        # Plotting
+        x = np.arange(len(labels))
+        width = 0.35
+
+        plt.figure(figsize=(10, 4))
+        plt.bar(x - width/2, qm9_probs, width, label=f'QM9 (N={len(qm9_atoms)})', color='#A8D5BA', edgecolor='#5B9279')
+        plt.bar(x + width/2, edm_probs, width, label=f'EDM (N={len(edm_atoms)})', color='#AFCBFF', edgecolor='#487EBF')
+
+        plt.xticks(x, labels)
+        plt.xlabel('Atomic Number (Z)')
+        plt.ylabel('Relative Frequency')
+        plt.title('Atom Type Distribution (QM9 vs EDM Samples)', fontsize=13)
+        plt.legend()
+        plt.tight_layout()
+
+        save_path = os.path.join(self.save_folder_path, 'atom_type_distribution.png')
         plt.savefig(save_path, dpi=300)
         plt.close()
 
@@ -117,7 +166,7 @@ if __name__ == '__main__':
     args = parse_args()
     plotter = HistogramPlotter(resolution=args.resolution, save_folder_path=args.save_folder_path)
 
-    prop_pred, prop_pred_cfg = load_prop_pred(args.prop_pred_path, args.device)
+    prop_pred, prop_pred_cfg = load_prop_pred(args.prop_pred_path, 'cpu') # since samples will be on cpu
     edm, noise, edm_cfg = load_model(args.edm_path, args.device)
     
     # Set to eval mode
@@ -134,7 +183,7 @@ if __name__ == '__main__':
     clean_samples = []
 
     # Check for stability and validity
-    for idx, mol in tqdm(enumerate(samples)):
+    for idx, mol in enumerate(samples):
         res = bench.run_all([mol], requested=1, q=True)
         if res['stability'] == (1.0, 1.0) and res['validity'] == 1.0:
             clean_samples.append(mol)
@@ -144,7 +193,7 @@ if __name__ == '__main__':
 
     qm9 = QM9Dataset(
         p=number_of_samples / 100_000, 
-        device='cpu', 
+        device='cpu', # since samples will be on cpu
         batch_size=number_of_samples, 
         atom_scale=1, 
         target_idx=prop_pred_cfg['target_idx']
@@ -177,3 +226,4 @@ if __name__ == '__main__':
     target_idx = prop_pred_cfg['target_idx']
     plotter.plot_hist(data_pred, target_idx=target_idx, label='QM9')
     plotter.plot_double_hist(data_pred, sample_preds, target_idx=target_idx)
+    plotter.plot_atom_categorical(qm9_mols=dataloader[0].to_data_list(), edm_mols=clean_samples)
