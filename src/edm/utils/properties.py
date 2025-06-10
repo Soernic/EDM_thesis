@@ -14,18 +14,18 @@ property_names = {
 }
 
 property_names_safe = {
-    0: 'dipole_moment',
-    1: 'isotropic_polarizability',
-    2: 'homo_energy',
-    3: 'lumo_energy',
-    4: 'homo_lumo_gap',
-    5: 'electronic_spatial_extent',
-    6: 'zpve',
-    7: 'u0',
-    8: 'u',
-    9: 'h',
-    10: 'g',
-    11: 'heat_capacity'
+    0: 'dipole moment',
+    1: 'isotropic polarizability',
+    2: 'HOMO energy',
+    3: 'LUMO energy',
+    4: 'HUMO LUMO gap',
+    5: 'Electronic spatial extent',
+    6: 'ZPVE',
+    7: 'U0',
+    8: 'U',
+    9: 'H',
+    10: 'H',
+    11: 'Heat capacity'
 }
 
 atomic_number_to_symbol = {

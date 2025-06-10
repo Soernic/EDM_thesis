@@ -20,7 +20,7 @@ def extract_scale(filename):
     """
     Extracts atom scale as XXX / 100.0 from filenames like EDM_5_XXX.pt
     """
-    match = re.search(r'EDM5_(\d{3})\.pt', filename)
+    match = re.search(r'EDM9_(\d{3})\.pt', filename)
     if match:
         return int(match.group(1)) / 100.0
     return None
@@ -40,12 +40,13 @@ def main():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--samples', type=int, default=200, help='Number of molecules to sample per model')
     parser.add_argument('--model_dir', type=str, default='models/atom_scale_sweep/', help='Folder with .pt model files')
+    parser.add_argument('--plot_name', type=str, default='atom_scale_sweep')
 
     args = parser.parse_args()
 
     # Make sure output directory exists
     out_dir = 'plots/atom_scale/'
-    out_fname = f"{args.samples:05}_atom_scale_sweep.png"
+    out_fname = f"{args.samples:05}_{args.plot_name}.png"
     out_path = os.path.join(out_dir, out_fname)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -73,18 +74,31 @@ def main():
     results.sort()
     scales, stabilities = zip(*results)
 
-    # Plotting
+    # Calculate errors for each point
+    errors = [ (p * (1.0 - p) / args.samples) ** 0.5  for p in stabilities ]
+
+
+    # # Plotting
+    # plt.figure(figsize=(10, 4))
+    # sns.lineplot(x=scales, y=stabilities, marker='o')
+    # plt.xlabel("Atom scale (relative h weighting)", fontsize=12)
+    # plt.ylabel("Molecule stability", fontsize=12)
+    # plt.title(f"Stability vs. Atom Scale Sweep ({args.samples} samples/model)", fontsize=12)
+    # plt.xticks(fontsize=12)
+    # plt.yticks(fontsize=12)
+    # plt.tight_layout()
+    # plt.savefig(out_path)
+    # plt.show()
+
     plt.figure(figsize=(10, 4))
-    sns.lineplot(x=scales, y=stabilities, marker='o')
+    plt.errorbar(scales, stabilities, yerr=errors,
+                fmt='o-', capsize=3, elinewidth=1, ecolor='gray')
     plt.xlabel("Atom scale (relative h weighting)", fontsize=12)
     plt.ylabel("Molecule stability", fontsize=12)
     plt.title(f"Stability vs. Atom Scale Sweep ({args.samples} samples/model)", fontsize=12)
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=12)
     plt.tight_layout()
     plt.savefig(out_path)
-    plt.show()
-
+    # plt.show()
 
     import pandas as pd  # Put this at the top of your script
 

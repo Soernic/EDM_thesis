@@ -116,7 +116,7 @@ class LinearNoiseSchedule:
         return self.alphas[t]
 
     def sigma(self, t):
-        return (1 - self.alpha(t)**2)
+        return torch.sqrt(1 - self.alpha(t)**2)
 
     def alpha_t_given_s(self, t, s):
         return self.alpha(t) / self.alpha(s)

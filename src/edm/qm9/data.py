@@ -12,6 +12,7 @@ from torch_geometric.datasets import QM9
 from tqdm import tqdm
 from edm.qm9.transforms import CenterOfMassTransform, FullyConnectedTransform
 
+from pdb import set_trace
 
 class QM9Dataset:
     def __init__(
@@ -62,6 +63,19 @@ class QM9Dataset:
             7: ('U₀', 'meV'),
         }
 
+        # From https://pytorch-geometric.readthedocs.io/en/2.4.0/_modules/torch_geometric/datasets/qm9.html
+        self.energy_reference = {
+            1:  -13.61312172,   # H
+            6: -1029.86312267,  # C
+            7: -1485.30251237,  # N
+            8: -2042.61123593,  # O
+            9: -2713.48485589,  # F
+        }
+
+        # Currently only implemented for the U0 energy.
+        self.energy_properties = [7]  # TODO: Add more if there is time so that you can train on all of them
+
+
 
     def download_data(self):
         self.dataset = QM9(root='./data/QM9')
@@ -95,41 +109,111 @@ class QM9Dataset:
             dataset_subset, [train_len, val_len, test_len], generator=self.generator)
 
 
+    # Taking into account the energy normalisation trick now
     def compute_statistics_and_normalise(self):
-        if self.target_idx is not None:
+        assert self.target_idx is not None, 'target_idx must be set first.'
 
-            # Fill in targets for train_data
-            all_targets = torch.zeros(len(self.train_data))
+        is_energy = self.target_idx in self.energy_properties
+        print(f'[info] Normalising with '
+              f'{"atomic baseline" if is_energy else "min–max"} strategy.')
 
-            for i, data in tqdm(enumerate(self.train_data)):
-                all_targets[i] = data.y[:, self.target_idx]
+        if is_energy:
+            # subtract per-molecule baseline, no further scaling
+            for dataset in (self.train_data, self.val_data, self.test_data):
+                for data in dataset:
+                    baseline = data.y.new_tensor(
+                        [self.energy_reference[int(z)] for z in data.z]
+                    ).sum()
+                    residual = data.y[:, self.target_idx] - baseline
+                    data.c = residual                         # convenience copy
+                    data.y[:, self.target_idx] = residual      # value seen by the model
+            # keep attributes for completeness
+            self.mins = None
+            self.maxs = None
 
-            self.mins = all_targets.min(dim=0).values
-            self.maxs = all_targets.max(dim=0).values
+        else:  # classic min-max on the training set only
+            train_targets = torch.cat(
+                [d.y[:, self.target_idx] for d in self.train_data]
+            )
 
-            print(f'Statistics computed..')
-            print(f'Minimum: {self.mins:.3f}')
-            print(f'Maximum: {self.maxs:.3f}')
+            self.mins = train_targets.min()
+            self.maxs = train_targets.max()
+            denom = (self.maxs - self.mins).clamp(min=1e-12)
 
-            # Overwrite regression targets
-            # For train
-            for i, data in tqdm(enumerate(self.train_data)):
-                data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
-                data.c = data.y[:, self.target_idx] # just duplicate it
+            for dataset in (self.train_data, self.val_data, self.test_data):
+                for data in dataset:
+                    normed = (data.y[:, self.target_idx] - self.mins) / denom
+                    data.c = normed
+                    data.y[:, self.target_idx] = normed
 
-            # For val
-            for i, data in tqdm(enumerate(self.val_data)):
-                data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
-                data.c = data.y[:, self.target_idx] # just duplicate it
+    
+    # Now denormalising based on whether it is energy or min-max normalisation going on
+    def denormalise(self, y, data_list=None):
+        """
+        Inverse of `compute_statistics_and_normalise`.
 
-            # For test
-            for i, data in tqdm(enumerate(self.test_data)):
-                data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
-                data.c = data.y[:, self.target_idx] # just duplicate it
+        Parameters
+        ----------
+        y          : torch.Tensor
+            Batched predictions or targets in *normalised* space, shape (N,) or (N,1).
+        data_list  : list[torch_geometric.data.Data] | None
+            Required for energy targets because we need the atomic numbers
+            to rebuild the baseline. Ignored for simple min-max targets.
+        """
+        is_energy = self.target_idx in self.energy_properties
+
+        if is_energy:
+            if data_list is None:
+                raise ValueError('`data_list` must be provided for energy targets.')
+
+            y_out = y.clone()
+            for i, data in enumerate(data_list):
+                baseline = y.new_tensor(
+                    [self.energy_reference[int(z)] for z in data.z]
+                ).sum()
+                y_out[i] += baseline
+                # set_trace()
+            return y_out
+
+        # min-max branch
+        return y * (self.maxs - self.mins) + self.mins
+
+
+    # def compute_statistics_and_normalise(self):
+    #     if self.target_idx is not None:
+
+    #         # Fill in targets for train_data
+    #         all_targets = torch.zeros(len(self.train_data))
+
+    #         for i, data in tqdm(enumerate(self.train_data)):
+    #             all_targets[i] = data.y[:, self.target_idx]
+
+    #         self.mins = all_targets.min(dim=0).values
+    #         self.maxs = all_targets.max(dim=0).values
+
+    #         print(f'Statistics computed..')
+    #         print(f'Minimum: {self.mins:.3f}')
+    #         print(f'Maximum: {self.maxs:.3f}')
+
+    #         # Overwrite regression targets
+    #         # For train
+    #         for i, data in tqdm(enumerate(self.train_data)):
+    #             data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
+    #             data.c = data.y[:, self.target_idx] # just duplicate it
+
+    #         # For val
+    #         for i, data in tqdm(enumerate(self.val_data)):
+    #             data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
+    #             data.c = data.y[:, self.target_idx] # just duplicate it
+
+    #         # For test
+    #         for i, data in tqdm(enumerate(self.test_data)):
+    #             data.y[:, self.target_idx] = (data.y[:, self.target_idx] - self.mins) / (self.maxs - self.mins)
+    #             data.c = data.y[:, self.target_idx] # just duplicate it
             
-    def denormalise(self, y):
-        y = y * (self.maxs - self.mins) + self.mins
-        return y
+    # def denormalise(self, y):
+    #     y = y * (self.maxs - self.mins) + self.mins
+    #     return y
 
 
     def make_dataloaders(self):

@@ -42,6 +42,7 @@ def parse_args():
     p.add_argument("--num_checkpoints", type=int, default=11, dest="num_ckpt",
                    help="Evenly spaced number of checkpoints between T and 0 "
                         "(ignored if --checkpoints is given)")
+    p.add_argument('--subfolder', type=str, default='trajectory', help='Will be saved in plots/{subfolder}')
 
     return p.parse_args()
 
@@ -65,7 +66,7 @@ def main():
     trajectories = sampler.sample(n_samples=args.samples)
 
     # ---------- output set-up --------------------------------------------------
-    root = Path("plots") / "trajectory"
+    root = Path("plots") / f"{args.subfolder}"
     root.mkdir(parents=True, exist_ok=True)
 
     checkpoints = sampler.checkpoints        # resolved list from the sampler

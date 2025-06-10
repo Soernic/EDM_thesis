@@ -21,13 +21,14 @@ class HistogramPlotter:
         self.save_folder_path = save_folder_path
 
     def plot_hist(self, prop_tensor, name_key, label='QM9'):
-        title, unit = property_names[name_key]
+        title = property_names_safe[name_key]
         values = prop_tensor.cpu().numpy()
+        
         plt.figure(figsize=(8, 4))
         sns.histplot(values, bins=self.resolution, stat='probability', kde=False,
                      color='#A8D5BA', edgecolor='#5B9279', linewidth=1.0)
         plt.title(f'{title} Distribution - {label}', fontsize=14)
-        plt.xlabel(f'{title} [{unit}]', fontsize=12)
+        plt.xlabel(f'{title}', fontsize=12)
         plt.ylabel('Probability', fontsize=12)
         plt.tight_layout()
         filename = f'{label}_{property_names_safe[name_key]}.png'
@@ -35,18 +36,28 @@ class HistogramPlotter:
         plt.close()
 
     def plot_double_hist(self, prop_data, prop_edm, name_key, label_data='QM9', label_edm='EDM'):
-        title, unit = property_names[name_key]
+        title = property_names_safe[name_key]
         values_data = prop_data.cpu().numpy()
         values_edm = prop_edm.cpu().numpy()
+        n_data, n_edm = len(values_data), len(values_edm)
+        
+
+        # Determine the global min and max across both sets
+        min_val = min(values_data.min(), values_edm.min())
+        max_val = max(values_data.max(), values_edm.max())
+
+        # Build N+1 equally‐spaced edges from min to max
+        bin_edges = np.linspace(min_val, max_val, self.resolution + 1)        
+
         plt.figure(figsize=(8, 4))
-        sns.histplot(values_data, bins=self.resolution, stat='probability', kde=False,
+        sns.histplot(values_data, bins=bin_edges, stat='probability', kde=False,
                      color='#A8D5BA', edgecolor='#5B9279', linewidth=1.0,
-                     label=label_data, alpha=0.7)
-        sns.histplot(values_edm, bins=self.resolution, stat='probability', kde=False,
+                     label=f'{label_data} (N={n_data})', alpha=0.7)
+        sns.histplot(values_edm, bins=bin_edges, stat='probability', kde=False,
                      color='#AFCBFF', edgecolor='#487EBF', linewidth=1.0,
-                     label=label_edm, alpha=0.5)
+                     label=f'{label_data} (N={n_edm})', alpha=0.5)
         plt.title(f'{title} Distribution Comparison', fontsize=14)
-        plt.xlabel(f'{title} [{unit}]', fontsize=12)
+        plt.xlabel(f'{title}', fontsize=12)
         plt.ylabel('Probability', fontsize=12)
         plt.legend()
         plt.tight_layout()

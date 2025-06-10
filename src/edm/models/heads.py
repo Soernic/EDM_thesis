@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 
 from pdb import set_trace
 
@@ -85,6 +86,7 @@ class AlphaEquivariantReadout(nn.Module):
         )
 
         self.nu = VectorLinear(state_dim)
+        # self.nu = DenseVectorLinear(state_dim)
 
     def forward(self, s, v, pos):        
         alpha_0 = self.alpha_0(s) # [B, 1]
@@ -115,5 +117,28 @@ class VectorLinear(nn.Module):
         return out
 
 
+class DenseVectorLinear(nn.Module):
+    """
+    More flexible version of the VectorLinear layer - rather than just a broadcast dot product
+    we add an F \times F matrix multiplication along the feature dimension and broadcast to 
+    the spatial dimensions. 
+    """
+    def __init__(self, state_dim: int):
+        super().__init__()
+        self.state_dim = state_dim
 
+        # Matrix multiplication with F times F matrix along feature dimension, broadcast to spatial dims
+        self.V = nn.Parameter(torch.randn(state_dim, state_dim))
+        init.xavier_normal_(self.V) # initialise 
+
+        # For collapsing the feature dimension
+        self.w = nn.Parameter(torch.ones(state_dim))
+
+    def forward(self, v: torch.Tensor) -> torch.Tensor:
+        # v is [B, F, 3]
+
+        v_mixed = torch.einsum('b g j, f g -> b f j', v, self.V)          # [B, F, 3]
+        v_weighted = v_mixed * self.w[None, :, None]                      # [B, F, 3]
+        out = v_weighted.sum(dim=1)                                       # [B, 3]
+        return out
 

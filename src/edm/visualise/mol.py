@@ -31,13 +31,23 @@ if is_headless():
     os.environ["XDG_RUNTIME_DIR"] = tmp_dir
 
 
+# ATOM_COLOUR = {
+#     'H': "#DAD7D7",   # white
+#     'C': "#7A7575",   # mid-grey
+#     'N': "#3352EB",   # blue
+#     'O': "#DE3333",   # red
+#     'F': "#D77936",   # green
+# }
+
+
 ATOM_COLOUR = {
-    'H': "#DAD7D7",   # white
-    'C': "#7A7575",   # mid-grey
+    'H': "#A09B9B",   # white
+    'C': "#635E5E",   # mid-grey
     'N': "#3352EB",   # blue
     'O': "#DE3333",   # red
     'F': "#D77936",   # green
 }
+
 
 ATOM_RADIUS = {
     'H': 0.46,
@@ -76,7 +86,7 @@ def save_molecule_png(
         lighting=None,                # we’ll add custom lights
         polygon_smoothing=True,
     )
-    plotter.set_background("black")
+    plotter.set_background("white")
 
     _plot_molecule_pyvista(plotter, pos, z, spheres_3d)
 
@@ -124,6 +134,7 @@ def save_molecule_png(
     # same optional “brightness pop” you used before
     img = imageio.imread(outfile)
     img = np.clip(img * 1.4, 0, 255).astype("uint8")
+    img = np.clip(img * 1, 0, 255).astype("uint8")
     imageio.imwrite(outfile, img)
 
 
@@ -192,7 +203,8 @@ def _plot_molecule_pyvista(plotter, pos, z, spheres_3d=True):
                          n_sides=24, capping=True)
         plotter.add_mesh(
             tube,
-            color=(0.8, 0.8, 0.8),
+            # color=(0.8, 0.8, 0.8),
+            color=(0.6, 0.6, 0.6),
             specular=0.6,
             specular_power=18,
             smooth_shading=True,

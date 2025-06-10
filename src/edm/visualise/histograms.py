@@ -29,7 +29,7 @@ class HistogramPlotter:
 
     def plot_hist(self, prop_tensor, target_idx, label='QM9'):
         values = prop_tensor.cpu().numpy()
-        title, unit = property_names[target_idx]
+        title = property_names[target_idx]
 
         plt.figure(figsize=(8, 4))
         ax = sns.histplot(
@@ -42,7 +42,7 @@ class HistogramPlotter:
             linewidth=1.0,
         )
         ax.set_title(f'{title} Distribution - {label}', fontsize=14)
-        ax.set_xlabel(f'{title} [{unit}]', fontsize=12)
+        ax.set_xlabel(f'{title}', fontsize=12)
         ax.set_ylabel('Probability', fontsize=12)
 
         plt.tight_layout()
@@ -54,12 +54,19 @@ class HistogramPlotter:
     def plot_double_hist(self, prop_data, prop_edm, target_idx, label_data='QM9', label_edm='EDM'):
         values_data = prop_data.cpu().numpy()
         values_edm = prop_edm.cpu().numpy()
-        title, unit = property_names[target_idx]
+        title = property_names[target_idx]
+
+        # Determine the global min and max across both sets
+        min_val = min(values_data.min(), values_edm.min())
+        max_val = max(values_data.max(), values_edm.max())
+
+        # Build N+1 equally‐spaced edges from min to max
+        bin_edges = np.linspace(min_val, max_val, self.resolution + 1)        
 
         plt.figure(figsize=(8, 4))
         ax = sns.histplot(
             values_data,
-            bins=self.resolution,
+            bins=bin_edges,
             stat='probability',
             kde=False,
             color='#A8D5BA',
@@ -70,7 +77,7 @@ class HistogramPlotter:
         )
         sns.histplot(
             values_edm,
-            bins=self.resolution,
+            bins=bin_edges,
             stat='probability',
             kde=False,
             color='#AFCBFF',
@@ -81,8 +88,9 @@ class HistogramPlotter:
         )
 
         ax.set_title(f'{title} Distribution Comparison', fontsize=14)
-        ax.set_xlabel(f'{title} [{unit}]', fontsize=12)
+        ax.set_xlabel(f'{title}', fontsize=12)
         ax.set_ylabel('Probability', fontsize=12)
+        ax.set_xlim(min_val, max_val)
         ax.legend()
 
         plt.tight_layout()
@@ -146,7 +154,7 @@ def parse_args():
     )
 
     parser.add_argument('--prop_pred_path', type=str, default='models/mu.pt', help='Path to property prediction model')
-    parser.add_argument('--edm_path', type=str, default='models/edm.pt', help='Path to EDM sampler model')
+    parser.add_argument('--edm_path', type=str, default='models/edm_cosine.pt', help='Path to EDM sampler model')
 
     parser.add_argument('--samples', type=int, default=1000, help='How many samples to generate with EDM')
     parser.add_argument('--resolution', type=int, default=50, help='How many bins there should be in the histogram')

@@ -1,5 +1,6 @@
 import torch
 import argparse
+import math
 
 from edm.utils import load_model
 from edm.benchmark import Benchmarks
@@ -19,6 +20,31 @@ def parse_args():
     return parser.parse_args()
 
 
+def sample_in_chunks(sampler, total_samples):
+    """Sample in one or two passes so no call exceeds 5 000 molecules."""
+    if total_samples <= 5000:
+        return sampler.sample(total_samples)
+
+    print(f'[benchmark] More than 5k samples requested - GPU memory does not like that')
+    print(f'[benchmark] Splitting in two separate sampling paths.. ')
+
+    # Split into two halves, each ≤ 5 000
+    first_half = math.ceil(total_samples / 2)      # rounds up
+    second_half = total_samples - first_half       # rounds down
+    assert first_half <= 5_000 and second_half <= 5_000
+
+    samples = sampler.sample(first_half)
+    sampler.seed += 1                               # or use any new integer
+
+    # Free GPU memory from the first batch before the second pass
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    samples += sampler.sample(second_half)         # concatenate lists
+    return samples
+
+
+
 def main():
     args = parse_args()
 
@@ -26,7 +52,7 @@ def main():
     sampler = EDMSampler(model, noise, cfg, args)
     bench = Benchmarks()
 
-    samples = sampler.sample(args.samples)
+    samples = sample_in_chunks(sampler, args.samples)
     results = bench.run_all(samples, args.samples)
 
     return results
