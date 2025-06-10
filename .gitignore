@@ -21,3 +21,7 @@ __pycache__/
 plots/trajectory/*
 plots/QM9/*
 plots/qm9/*
+plots/trajectory/*
+plots/trajectory_comparison/*
+plots/edm/*
+plots/
