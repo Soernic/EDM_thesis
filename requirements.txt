@@ -1,0 +1,12 @@
+torch
+tqdm
+tensorboard
+matplotlib
+seaborn
+pandas
+numpy
+pyvista
+torch_geometric
+imageio
+rdkit
+ase

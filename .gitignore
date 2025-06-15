@@ -3,6 +3,8 @@ batch/logs/*
 batch/*.sh
 batch/*.err
 batch/*.out
+batch/prop/*
+!batch/prop/.gitkeep
 
 data/*
 !data/.gitkeep
