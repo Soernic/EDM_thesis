@@ -25,6 +25,7 @@ class EDMSampler:
                 self.device = args.device
                 cfg['device'] = args.device
 
+
         self.model = model
         self.noise = noise_schedule
         self.cfg = cfg
@@ -33,6 +34,16 @@ class EDMSampler:
         self.T = cfg['T']
         self.atom_scale = cfg['atom_scale']
         self.data = QM9Dataset(p=cfg['p'], device=cfg['device'], atom_scale=cfg['atom_scale'])
+
+        # If there's a graph library, load that in. The presence of a graph library means that
+        # the diffusion model is trained with an edge cutoff, and we should sample accordingly
+        # This means, when we initialise the graphs, we use partially connected graphs like we did
+        # during training - otherwise EDM will assume that "since everythign is connected, then
+        # everything must be close to everything" --> very round structures and lower uniqueness
+        self.graph_library = cfg.get('graph_library', None)
+        self.atom_types_reverse = cfg.get('atom_types_reverse',
+                                        torch.tensor([1,6,7,8,9], device=self.device))
+        
         self.categorical_distribution = cfg['categorical_distribution']
 
         if 'joint_distribution' in cfg:
@@ -81,16 +92,39 @@ class EDMSampler:
         total_atoms = int(M_vec.sum())
         batch = torch.repeat_interleave(torch.arange(n_samples, device=device), M_vec).long()
 
-        # Generate fully connected graphs
+        # set_trace()
+
+        # Sampling procedure using either the graph library if it exists and 
+        # otherwise defaults to standard dense graph initialisation
+        import random
         edge_chunks = []
         start = 0
         for Mi in M_vec.tolist():
-            idx = torch.arange(start, start + Mi, device=device)
-            pairs = torch.combinations(idx, r=2, with_replacement=False)
-            edges = torch.cat([pairs, pairs.flip(1)], dim=0).T
+            if self.graph_library and Mi in self.graph_library:
+                # pick a random template, shift indices, push to device
+                template = random.choice(self.graph_library[Mi]).to(device)
+                edges = template + start
+            else:
+                # fall back to full clique
+                idx = torch.arange(start, start + Mi, device=device)
+                pairs = torch.combinations(idx, r=2, with_replacement=False)
+                edges = torch.cat([pairs, pairs.flip(1)], dim=0).T
             edge_chunks.append(edges)
             start += Mi
-        edge_index = torch.cat(edge_chunks, dim=1)  
+        edge_index = torch.cat(edge_chunks, dim=1)
+
+        # set_trace()
+
+        # # Generate fully connected graphs
+        # edge_chunks = []
+        # start = 0
+        # for Mi in M_vec.tolist():
+        #     idx = torch.arange(start, start + Mi, device=device)
+        #     pairs = torch.combinations(idx, r=2, with_replacement=False)
+        #     edges = torch.cat([pairs, pairs.flip(1)], dim=0).T
+        #     edge_chunks.append(edges)
+        #     start += Mi
+        # edge_index = torch.cat(edge_chunks, dim=1)  
 
         # Draw positional and invariant features and construct Data object. 
         pos = torch.randn(total_atoms, 3, device=device, generator=g)

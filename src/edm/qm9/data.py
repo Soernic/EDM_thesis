@@ -72,8 +72,32 @@ class QM9Dataset:
             9: -2713.48485589,  # F
         }
 
+        # from PyG like abvoe
+        self.atomrefs = {
+            6: [0., 0., 0., 0., 0.],
+            7: [
+                -13.61312172, -1029.86312267, -1485.30251237, -2042.61123593,
+                -2713.48485589
+            ],
+            8: [
+                -13.5745904, -1029.82456413, -1485.26398105, -2042.5727046,
+                -2713.44632457
+            ],
+            9: [
+                -13.54887564, -1029.79887659, -1485.2382935, -2042.54701705,
+                -2713.42063702
+            ],
+            10: [
+                -13.90303183, -1030.25891228, -1485.71166277, -2043.01812778,
+                -2713.88796536
+            ],
+            11: [0., 0., 0., 0., 0.],
+        }
+                
+
         # Currently only implemented for the U0 energy.
-        self.energy_properties = [7]  # TODO: Add more if there is time so that you can train on all of them
+        # self.energy_properties = [7]  # TODO: Add more if there is time so that you can train on all of them
+        self.energy_properties = [6, 7, 8, 9, 10, 11]
 
 
 
@@ -121,9 +145,15 @@ class QM9Dataset:
             # subtract per-molecule baseline, no further scaling
             for dataset in (self.train_data, self.val_data, self.test_data):
                 for data in dataset:
-                    baseline = data.y.new_tensor(
-                        [self.energy_reference[int(z)] for z in data.z]
-                    ).sum()
+                    # baseline = data.y.new_tensor(
+                    #     [self.energy_reference[int(z)] for z in data.z]
+                    # ).sum()
+
+                    
+                    ref = torch.as_tensor(self.atomrefs[self.target_idx], device=data.y.device)
+                    mapping = self.mapping_tensor.to(data.z.device)
+                    baseline = ref[mapping[data.z]].sum()
+
                     residual = data.y[:, self.target_idx] - baseline
                     data.c = residual                         # convenience copy
                     data.y[:, self.target_idx] = residual      # value seen by the model
@@ -168,9 +198,14 @@ class QM9Dataset:
 
             y_out = y.clone()
             for i, data in enumerate(data_list):
-                baseline = y.new_tensor(
-                    [self.energy_reference[int(z)] for z in data.z]
-                ).sum()
+                # baseline = y.new_tensor(
+                #     [self.energy_reference[int(z)] for z in data.z]
+                # ).sum()
+
+                ref = torch.as_tensor(self.atomrefs[self.target_idx], device=data.y.device)
+                mapping = self.mapping_tensor.to(data.z.device)
+                baseline = ref[mapping[data.z]].sum()
+
                 y_out[i] += baseline
                 # set_trace()
             return y_out
@@ -299,3 +334,23 @@ class QM9Dataset:
         mapped_indices = self.mapping_tensor[z]
         h = F.one_hot(mapped_indices, num_classes=len(self.atom_types)).float()
         return h * self.atom_scale
+
+
+    def build_graph_library(self, max_per_size: int = 1_000):
+        """
+        Collect at most `max_per_size` edge_index templates for every
+        molecule size M that appears in the *training* split.  
+        Only edge_index is stored, so the memory footprint is tiny.
+        Returns
+        -------
+        dict[int, list[torch.Tensor]]  mapping M -> [edge_index_i (2xE)]
+        """
+        import random
+        print(f'[preprocessing] Saving {max_per_size} blueprints pr. molecule size')
+        lib = {}
+        for data in self.train_data:        # already cut-off & centred
+            M = data.z.size(0)
+            bucket = lib.setdefault(M, [])
+            if len(bucket) < max_per_size:
+                bucket.append(data.edge_index.clone().cpu())  # keep on CPU
+        return lib

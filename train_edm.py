@@ -32,10 +32,11 @@ def parse_args():
     parser.add_argument('--num_rounds', type=int, default=9, help='Number of interaction rounds')
     parser.add_argument('--state_dim', type=int, default=256, help='Dimensionality of node embeddings')
     parser.add_argument('--cutoff_preprocessing', type=float, default=None, 
-                        help='Edge cutoff distance, should be None for diffusion, ~5 for property prediction')
+                        help='Edge cutoff distance, default is None for diffusion, ~5 for property prediction')
     parser.add_argument('--cutoff_painn', type=float, default=5,
                         help='r_cut for cosine cutoff scaling in PaiNN model')
     parser.add_argument('--edge_dim', type=int, default=64, help='Dimensionality of edge features')
+    parser.add_argument('--num_blueprints', type=int, default=1000, help='How many connectivity graph blueprints to save during preprocessing for sampling later. Used only if cutoff_preprocessing != None.')
     # Data & training
     parser.add_argument('--batch_size', type=int, default=100, help='Batch size')
     parser.add_argument('--atom_scale', type=float, default=0.25,
@@ -73,6 +74,7 @@ def main():
         'num_rounds': args.num_rounds,
         'state_dim': args.state_dim,
         'cutoff_preprocessing': args.cutoff_preprocessing,
+        'num_blueprints': args.num_blueprints,
         'cutoff_painn': args.cutoff_painn,
         'edge_dim': args.edge_dim,
         'batch_size': args.batch_size,
@@ -86,7 +88,7 @@ def main():
 
     trainer = EDMTrainer(config)
     trainer.train(args.epochs)
-    atom_stab, mol_stab = trainer.benchmark()
+    atom_stab, mol_stab = trainer.benchmark(5000)
     print(f'Final benchmark — atom stability: {atom_stab:.3f}, molecule stability: {mol_stab:.3f}')
 
 

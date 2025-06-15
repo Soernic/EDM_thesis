@@ -23,7 +23,7 @@ try:
 except ImportError:
     TENSORBOARD_AVAILABLE = False
 
-
+from pdb import set_trace
 
 
 class EDMTrainer:
@@ -79,7 +79,8 @@ class EDMTrainer:
             generator=self.generator,
             device=self.device,
             batch_size=self.batch_size,
-            atom_scale=self.atom_scale
+            atom_scale=self.atom_scale,
+            cutoff_preprocessing=config.get('cutoff_preprocessing')
         )
 
         # Ready train, val, test split, create loaders, and push everything to GPU all at once. 
@@ -87,6 +88,17 @@ class EDMTrainer:
         self.categorical_distribution = self.data.compute_categorical_distribution()
         self.config['categorical_distribution'] = self.categorical_distribution
         self.train_loader, self.val_loader, self.test_loader = self.data.make_dataloaders() # on GPU. 
+
+        # Special case where we are training with a cutoff so graphs are no longer fully connected
+        # We build a graph connectivity library that we can sample from later
+        # This is saved in config so we have it when we need to sample.
+        self.graph_library = None
+        if config.get('cutoff_preprocessing') is not None:
+            self.graph_library = self.data.build_graph_library(config.get('num_blueprints'))
+            self.config['graph_library'] = self.graph_library          # (relatively) small
+            self.config['atom_types_reverse'] = self.data.atom_types_reverse
+
+        # set_trace()
 
         # Initialising after categorical distribution is defined and in config. 
         # The sampler needs it.
